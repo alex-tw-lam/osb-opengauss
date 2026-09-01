@@ -16,6 +16,10 @@ DEV_BROKER_PASSWORD = "broker-dev-password"  # nosec B105
 STORAGE_MODES = ("role_quota", "tablespace")
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes")
+
+
 @dataclass(frozen=True)
 class Settings:
     # Admin connection to the openGauss/GaussDB instance.
@@ -62,6 +66,10 @@ class Settings:
     # path levels, so this must be a single path segment.
     tablespace_location_prefix: str = "broker"
 
+    # Cloud Foundry sends organization/space GUIDs on OSB requests; Kubernetes
+    # Service Catalog does not. Keep the check on for CF platforms only.
+    disable_space_org_guid_check: bool = True
+
     @classmethod
     def from_env(cls) -> Settings:
         storage_mode = os.environ.get("GAUSSDB_STORAGE_MODE", cls.storage_mode)
@@ -92,4 +100,7 @@ class Settings:
             tablespaces=tablespaces,
             plans_file=os.environ.get("GAUSSDB_PLANS_FILE", cls.plans_file),
             tablespace_location_prefix=location_prefix,
+            disable_space_org_guid_check=_env_flag(
+                "DISABLE_SPACE_ORG_GUID_CHECK", cls.disable_space_org_guid_check
+            ),
         )

@@ -24,8 +24,9 @@ from .state import StateStore
 def create_app(settings: Settings | None = None) -> Flask:
     settings = settings or Settings.from_env()
 
-    # Kubernetes Service Catalog does not send Cloud Foundry org/space GUIDs.
-    openbrokerapi.settings.DISABLE_SPACE_ORG_GUID_CHECK = True
+    # Platform behaviour: Cloud Foundry sends org/space GUIDs on OSB
+    # requests, Kubernetes Service Catalog does not (see DISABLE_SPACE_ORG_GUID_CHECK).
+    openbrokerapi.settings.DISABLE_SPACE_ORG_GUID_CHECK = settings.disable_space_org_guid_check
 
     if settings.broker_password == DEV_BROKER_PASSWORD:
         logging.getLogger(__name__).warning(
