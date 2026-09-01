@@ -23,24 +23,35 @@ tablespaces is in [`docs/opengauss-research.md`](docs/opengauss-research.md).
 
 Each module owns one job, stated in its first docstring lines. Dependencies
 point one way only (app → broker → plans/params/gaussdb/state → config).
+Code is identical in every deployment; environment-specific values live in
+exactly two places: `plans.toml` (the offering) and environment variables
+(infrastructure wiring).
 
 | File | Responsibility |
 |---|---|
 | `app.py` | Flask wiring: builds the app, registers the OSB blueprint |
 | `broker.py` | OSB layer: maps API calls to admin + state calls; no SQL |
-| `plans.py` | Offering: service, plans (quota bundles), catalog assembly |
+| `plans.py` | Loads `plans.toml` (data), validates it, assembles the OSB catalog |
 | `params.py` | Request rules: parameter validation and the matching JSON schemas |
 | `gaussdb.py` | All openGauss DDL; knows SQL, not the OSB API |
 | `state.py` | SQLite tables recording what the broker created |
 | `config.py` | Environment variable names and their parsing |
+| `plans.toml` | **Data**: the plan catalog (quota bundles) offered by this deployment |
 
 ## Plans
 
-| Plan | storage (`PERM SPACE`) | temp | spill | DB connections |
-|---|---|---|---|---|
-| `gaussdb-dev` | 5 GB | 1 GB | 1 GB | 20 |
-| `gaussdb-standard` | 50 GB | 10 GB | 10 GB | 100 |
-| `gaussdb-pro` | 200 GB | 40 GB | 40 GB | 500 |
+Plans live in [`plans.toml`](plans.toml) — deployment **data**, not code.
+Each environment (lab / staging / prod) carries its own copy; the broker
+loads and validates it at startup and refuses to start on a missing,
+malformed or duplicate-id file. Fields:
+
+| Field | Meaning | Maps to |
+|---|---|---|
+| `id` / `name` / `description` | plan identity — never rename an `id` once instances exist on it | catalog |
+| `storage_gb` | storage quota | `PERM SPACE` / tablespace `MAXSIZE` |
+| `temp_gb` / `spill_gb` | temp / operator-spill quotas | `TEMP SPACE` / `SPILL SPACE` |
+| `max_connections` | max concurrent connections | database `CONNECTION LIMIT` |
+| `free` | optional, defaults to `true` | catalog billing hint |
 
 Optional provision parameters (JSON-schema validated, may only tighten the
 plan): `compatibility` (`PG`/`A`/`B`/`C`), `encoding`
@@ -125,11 +136,15 @@ curl $AUTH -H "$H" -X DELETE "localhost:5000/v2/service_instances/11111111-1111-
 | `GAUSSDB_ADMIN_USER` / `GAUSSDB_ADMIN_PASSWORD` | `gaussdb` / — | must be sysadmin or `CREATEDB`+`CREATEROLE` |
 | `GAUSSDB_ADMIN_DB` | `postgres` | database the broker connects to for DDL |
 | `GAUSSDB_SSLMODE` | `disable` | libpq sslmode, propagated in binding URIs |
+| `GAUSSDB_CONNECT_TIMEOUT` | `10` | admin connection timeout (seconds) |
 | `BROKER_USERNAME` / `BROKER_PASSWORD` | `broker` / dev default | OSB basic auth |
 | `STATE_DB_PATH` | `./osb-opengauss-state.sqlite3` | idempotency/credential store |
 | `GAUSSDB_NAME_PREFIX` | `gdb` | prefix for created databases/roles/users |
 | `GAUSSDB_STORAGE_MODE` | `role_quota` | `role_quota` or `tablespace` (see above) |
 | `GAUSSDB_TABLESPACES` | *(empty)* | curated tablespace enum for the `tablespace` parameter |
+| `GAUSSDB_PLANS_FILE` | `plans.toml` | the plan catalog data file (see Plans) |
+| `GAUSSDB_TABLESPACE_LOCATION_PREFIX` | `broker` | single path segment under `pg_location/` (tablespace mode) |
+| `DISABLE_SPACE_ORG_GUID_CHECK` | `true` | set `false` on Cloud Foundry (it sends org/space GUIDs; Kubernetes does not) |
 | `BROKER_HOST` / `BROKER_PORT` | `127.0.0.1` / `5000` | dev server bind |
 
 ## Behaviour notes
