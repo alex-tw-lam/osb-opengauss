@@ -39,8 +39,8 @@ def test_app_applies_platform_guid_check_setting(tmp_path):
     import dataclasses
 
     import openbrokerapi.settings
-
     from conftest import make_env
+
     from osb_opengauss.app import create_app
 
     original = openbrokerapi.settings.DISABLE_SPACE_ORG_GUID_CHECK
