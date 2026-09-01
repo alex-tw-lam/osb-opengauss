@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+
+# Local broker state (SQLite) and secrets
+*.sqlite3
+*.sqlite3-journal
+.env
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# Coverage artifacts
+.coverage
+.coverage.*
+htmlcov/

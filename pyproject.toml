@@ -1,0 +1,43 @@
+[project]
+name = "osb-opengauss"
+version = "0.1.0"
+description = "Open Service Broker API broker that provisions openGauss/GaussDB logical databases as service instances and scoped user accounts as bindings"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "openbrokerapi>=4.7.3",
+    "psycopg2-binary>=2.9.10",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
+[project.scripts]
+osb-opengauss = "osb_opengauss.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/osb_opengauss"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+# Deterministic rule set: pycodestyle, pyflakes, import order, pyupgrade,
+# bugbear, simplify. Adjacent f-strings (implicit concatenation) are used
+# on purpose to keep long SQL statements readable; that rule is not selected.
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+files = ["src"]
+ignore_missing_imports = true
+check_untyped_defs = true
