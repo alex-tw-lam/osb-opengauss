@@ -1,15 +1,18 @@
-"""The offering: service, plans and the OSB catalog object.
+"""The offering: loads the plan catalog from a data file, assembles the OSB catalog.
 
-This file answers one question only: what does the broker sell?
+`plans.toml` is DATA - each deployment carries its own copy. This file is the
+CODE that loads, validates and assembles it. Validation is strict and loud at
+startup so a broken data file can never produce a half-usable catalog.
 
-Each plan is a quota bundle. It does NOT know how requests are validated
-(params.py), how the quotas reach openGauss (gaussdb.py) or how the OSB
-endpoints are served (broker.py).
+It does NOT know how requests are validated (params.py), how the quotas reach
+openGauss (gaussdb.py) or how OSB endpoints are served (broker.py).
 """
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass
+from pathlib import Path
 
 from openbrokerapi.catalog import (
     Schemas,
@@ -24,6 +27,9 @@ from .params import binding_schema, instance_schema
 SERVICE_ID = "4c6f6a1e-0f5a-4a5b-9d7e-2f8b3a1c5e01"
 SERVICE_NAME = "gaussdb"
 
+_REQUIRED_FIELDS = ("id", "name", "description", "storage_gb", "temp_gb", "spill_gb", "max_connections")
+_QUOTA_FIELDS = ("storage_gb", "temp_gb", "spill_gb", "max_connections")
+
 
 @dataclass(frozen=True)
 class PlanSpec:
@@ -36,56 +42,56 @@ class PlanSpec:
     temp_gb: int  # TEMP SPACE
     spill_gb: int  # SPILL SPACE
     max_connections: int  # database CONNECTION LIMIT
+    free: bool = True
 
 
-PLANS: tuple[PlanSpec, ...] = (
-    PlanSpec(
-        id="gaussdb-dev",
-        name="dev",
-        description="Small logical database for development and CI.",
-        storage_gb=5,
-        temp_gb=1,
-        spill_gb=1,
-        max_connections=20,
-    ),
-    PlanSpec(
-        id="gaussdb-standard",
-        name="standard",
-        description="Standard logical database for production workloads.",
-        storage_gb=50,
-        temp_gb=10,
-        spill_gb=10,
-        max_connections=100,
-    ),
-    PlanSpec(
-        id="gaussdb-pro",
-        name="pro",
-        description="Large logical database with high connection counts.",
-        storage_gb=200,
-        temp_gb=40,
-        spill_gb=40,
-        max_connections=500,
-    ),
-)
+def load_plans(path: str) -> tuple[PlanSpec, ...]:
+    """Read and validate the plans file; raise ValueError on any problem."""
+    file = Path(path)
+    if not file.is_file():
+        raise ValueError(f"plans file not found: {file}")
 
-PLAN_INDEX: dict[str, PlanSpec] = {p.id: p for p in PLANS}
+    with file.open("rb") as fh:
+        rows = tomllib.load(fh).get("plan", [])
+
+    if not rows:
+        raise ValueError(f"plans file {file} contains no [[plan]] entries")
+
+    plans = []
+    seen_ids = set()
+    for position, row in enumerate(rows, start=1):
+        missing = set(_REQUIRED_FIELDS) - row.keys()
+        if missing:
+            raise ValueError(f"plan #{position} in {file} is missing fields: {sorted(missing)}")
+        for field in _QUOTA_FIELDS:
+            if not isinstance(row[field], int) or row[field] < 1:
+                raise ValueError(f"plan {row['id']!r} in {file}: {field} must be a positive integer")
+        if row["id"] in seen_ids:
+            raise ValueError(f"duplicate plan id {row['id']!r} in {file}")
+        seen_ids.add(row["id"])
+        plans.append(
+            PlanSpec(
+                id=row["id"],
+                name=row["name"],
+                description=row["description"],
+                storage_gb=row["storage_gb"],
+                temp_gb=row["temp_gb"],
+                spill_gb=row["spill_gb"],
+                max_connections=row["max_connections"],
+                free=bool(row.get("free", True)),
+            )
+        )
+    return tuple(plans)
 
 
-def get_plan(plan_id: str) -> PlanSpec:
-    try:
-        return PLAN_INDEX[plan_id]
-    except KeyError:
-        raise ValueError(f"Unknown plan_id {plan_id!r}") from None
-
-
-def build_service(tablespaces: tuple = ()) -> Service:
+def build_service(plans: tuple[PlanSpec, ...], tablespaces: tuple = ()) -> Service:
     """Assemble the /v2/catalog payload for the offering."""
-    plans = [
+    service_plans = [
         ServicePlan(
             id=plan.id,
             name=plan.name,
             description=plan.description,
-            free=True,
+            free=plan.free,
             metadata=ServicePlanMetadata(
                 displayName=f"GaussDB {plan.name}",
                 bullets=[
@@ -99,7 +105,7 @@ def build_service(tablespaces: tuple = ()) -> Service:
                 service_binding=binding_schema(plan),
             ),
         )
-        for plan in PLANS
+        for plan in plans
     ]
     return Service(
         id=SERVICE_ID,
@@ -110,7 +116,7 @@ def build_service(tablespaces: tuple = ()) -> Service:
             "accounts scoped to that database."
         ),
         bindable=True,
-        plans=plans,
+        plans=service_plans,
         tags=["gaussdb", "opengauss", "postgresql", "database", "sql"],
         metadata=ServiceMetadata(
             displayName="GaussDB (openGauss)",

@@ -54,6 +54,9 @@ class Settings:
     # parameter is not offered at all.
     tablespaces: tuple = ()
 
+    # The plan catalog data file (see plans.toml in the repository root).
+    plans_file: str = "plans.toml"
+
     @classmethod
     def from_env(cls) -> Settings:
         storage_mode = os.environ.get("GAUSSDB_STORAGE_MODE", cls.storage_mode)
@@ -77,4 +80,5 @@ class Settings:
             port=int(os.environ.get("BROKER_PORT", cls.port)),
             storage_mode=storage_mode,
             tablespaces=tablespaces,
+            plans_file=os.environ.get("GAUSSDB_PLANS_FILE", cls.plans_file),
         )

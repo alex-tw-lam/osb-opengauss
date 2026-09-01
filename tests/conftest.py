@@ -80,6 +80,38 @@ class FakeConnect:
         return "\n".join(s for _, s in self.all_statements())
 
 
+# The hermetic test plan catalog. Tests may hardcode these ids and numbers;
+# they reference THIS file, never the deployment's plans.toml.
+TEST_PLANS_TOML = """\
+[[plan]]
+id = "gaussdb-dev"
+name = "dev"
+description = "Small logical database for development and CI."
+storage_gb = 5
+temp_gb = 1
+spill_gb = 1
+max_connections = 20
+
+[[plan]]
+id = "gaussdb-standard"
+name = "standard"
+description = "Standard logical database for production workloads."
+storage_gb = 50
+temp_gb = 10
+spill_gb = 10
+max_connections = 100
+
+[[plan]]
+id = "gaussdb-pro"
+name = "pro"
+description = "Large logical database with high connection counts."
+storage_gb = 200
+temp_gb = 40
+spill_gb = 40
+max_connections = 500
+"""
+
+
 def make_env(tmp_path, **settings_overrides):
     from osb_opengauss.broker import GaussDbBroker
     from osb_opengauss.config import Settings
@@ -87,14 +119,18 @@ def make_env(tmp_path, **settings_overrides):
     from osb_opengauss.state import StateStore
 
     fake = FakeConnect()
-    settings = Settings(
+    plans_file = tmp_path / "plans.toml"
+    plans_file.write_text(TEST_PLANS_TOML)
+    defaults = dict(
         db_host="db.example.org",
         db_port=6789,
         db_user="admin",
         db_password="admin-secret",
         state_db_path=str(tmp_path / "state.sqlite3"),
-        **settings_overrides,
+        plans_file=str(plans_file),
     )
+    defaults.update(settings_overrides)
+    settings = Settings(**defaults)
     store = StateStore(settings.state_db_path)
     admin = GaussDBAdmin(settings, connect=fake)
     broker = GaussDbBroker(admin, store, settings)

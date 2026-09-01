@@ -3,7 +3,7 @@ name = "osb-opengauss"
 version = "0.1.0"
 description = "Open Service Broker API broker that provisions openGauss/GaussDB logical databases as service instances and scoped user accounts as bindings"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "openbrokerapi>=4.7.3",

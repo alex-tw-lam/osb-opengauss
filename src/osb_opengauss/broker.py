@@ -37,7 +37,7 @@ from openbrokerapi.service_broker import (
 from .config import Settings
 from .gaussdb import AlreadyExistsError, GaussDBAdmin, names_for, user_for
 from .params import InstanceParams, resolve_binding_params, resolve_instance_params
-from .plans import SERVICE_ID, build_service, get_plan
+from .plans import SERVICE_ID, PlanSpec, build_service, load_plans
 from .state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -48,11 +48,20 @@ class GaussDbBroker(ServiceBroker):
         self._admin = admin
         self._store = store
         self._settings = settings
+        # The plan catalog is data; load it once, fail fast on a bad file.
+        self._plans = load_plans(settings.plans_file)
+        self._plan_index = {plan.id: plan for plan in self._plans}
 
     # -- helpers -------------------------------------------------------------
 
     def _names(self, instance_id: str):
         return names_for(instance_id, self._settings.name_prefix)
+
+    def _get_plan(self, plan_id: str) -> PlanSpec:
+        plan = self._plan_index.get(plan_id)
+        if plan is None:
+            raise ValueError(f"Unknown plan_id {plan_id!r}")
+        return plan
 
     @staticmethod
     def _require_service(details) -> None:
@@ -79,7 +88,7 @@ class GaussDbBroker(ServiceBroker):
     # -- catalog -------------------------------------------------------------
 
     def catalog(self):
-        return build_service(self._settings.tablespaces)
+        return build_service(self._plans, self._settings.tablespaces)
 
     # -- instance lifecycle ----------------------------------------------------
 
@@ -88,7 +97,7 @@ class GaussDbBroker(ServiceBroker):
     ) -> ProvisionedServiceSpec:
         self._require_service(details)
         try:
-            plan = get_plan(details.plan_id)
+            plan = self._get_plan(details.plan_id)
             spec = resolve_instance_params(plan, details.parameters, self._settings.tablespaces)
         except ValueError as exc:
             raise errors.ErrInvalidParameters(str(exc)) from exc
@@ -130,7 +139,7 @@ class GaussDbBroker(ServiceBroker):
 
         try:
             spec = resolve_instance_params(
-                get_plan(previous_plan), details.parameters, self._settings.tablespaces
+                self._get_plan(previous_plan), details.parameters, self._settings.tablespaces
             )
         except ValueError as exc:
             raise errors.ErrInvalidParameters(str(exc)) from exc
@@ -170,7 +179,7 @@ class GaussDbBroker(ServiceBroker):
             raise errors.ErrInstanceDoesNotExist()
 
         try:
-            spec = resolve_binding_params(get_plan(instance["plan_id"]), details.parameters)
+            spec = resolve_binding_params(self._get_plan(instance["plan_id"]), details.parameters)
         except ValueError as exc:
             raise errors.ErrInvalidParameters(str(exc)) from exc
 
