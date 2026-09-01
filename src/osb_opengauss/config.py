@@ -57,6 +57,11 @@ class Settings:
     # The plan catalog data file (see plans.toml in the repository root).
     plans_file: str = "plans.toml"
 
+    # Where per-tenant tablespace directories are created under each node's
+    # pg_location/ (tablespace storage mode). openGauss allows at most two
+    # path levels, so this must be a single path segment.
+    tablespace_location_prefix: str = "broker"
+
     @classmethod
     def from_env(cls) -> Settings:
         storage_mode = os.environ.get("GAUSSDB_STORAGE_MODE", cls.storage_mode)
@@ -64,6 +69,11 @@ class Settings:
             raise ValueError(f"GAUSSDB_STORAGE_MODE must be one of {STORAGE_MODES}, got {storage_mode!r}")
         raw_tablespaces = os.environ.get("GAUSSDB_TABLESPACES", "")
         tablespaces = tuple(t.strip() for t in raw_tablespaces.split(",") if t.strip())
+        location_prefix = os.environ.get(
+            "GAUSSDB_TABLESPACE_LOCATION_PREFIX", cls.tablespace_location_prefix
+        ).strip("/")
+        if "/" in location_prefix:
+            raise ValueError("GAUSSDB_TABLESPACE_LOCATION_PREFIX must be a single path segment")
         return cls(
             db_host=os.environ.get("GAUSSDB_HOST", cls.db_host),
             db_port=int(os.environ.get("GAUSSDB_PORT", cls.db_port)),
@@ -81,4 +91,5 @@ class Settings:
             storage_mode=storage_mode,
             tablespaces=tablespaces,
             plans_file=os.environ.get("GAUSSDB_PLANS_FILE", cls.plans_file),
+            tablespace_location_prefix=location_prefix,
         )

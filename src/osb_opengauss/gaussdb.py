@@ -169,9 +169,11 @@ class GaussDBAdmin:
             if self._exists("pg_tablespace", "spcname", names.tablespace):
                 raise AlreadyExistsError(f"tablespace {names.tablespace} already exists")
             # A dedicated tablespace hard-caps the tenant's storage per node.
+            prefix = self._settings.tablespace_location_prefix
+            location = f"{prefix}/{names.tablespace}" if prefix else names.tablespace
             admin_stmts.append(
                 f"CREATE TABLESPACE {quote_ident(names.tablespace)} OWNER {own}"
-                f" RELATIVE LOCATION {quote_literal('broker/' + names.tablespace)}"
+                f" RELATIVE LOCATION {quote_literal(location)}"
                 f" MAXSIZE {quote_literal(f'{spec.storage_gb}GB')}"
             )
             default_tablespace = quote_ident(names.tablespace)

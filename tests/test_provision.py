@@ -129,3 +129,13 @@ def test_update_rejects_plan_change(env):
             ),
             async_allowed=False,
         )
+
+
+def test_provision_custom_tablespace_location_prefix(tmp_path):
+    from conftest import make_env
+
+    env = make_env(
+        tmp_path, storage_mode="tablespace", tablespace_location_prefix="tenants"
+    )
+    env.broker.provision(IID, details(), async_allowed=False)
+    assert f"RELATIVE LOCATION 'tenants/{DB}_ts'" in env.fake.sql_text()
