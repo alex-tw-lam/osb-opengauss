@@ -128,6 +128,16 @@ curl $AUTH -H "$H" -X DELETE "localhost:5000/v2/service_instances/11111111-1111-
 curl $AUTH -H "$H" -X DELETE "localhost:5000/v2/service_instances/11111111-1111-1111-1111-111111111111?service_id=4c6f6a1e-0f5a-4a5b-9d7e-2f8b3a1c5e01&plan_id=gaussdb-dev"
 ```
 
+## Health
+
+`GET /healthz` (no authentication) runs `SELECT 1` through the same admin
+connection the broker uses — point Kubernetes readiness probes, load
+balancers and monitoring at it:
+
+```bash
+curl -s localhost:5000/healthz   # {"status":"ok"} or 503 {"status":"unreachable", ...}
+```
+
 ## Configuration
 
 | Env var | Default | Meaning |
@@ -161,9 +171,13 @@ curl $AUTH -H "$H" -X DELETE "localhost:5000/v2/service_instances/11111111-1111-
 * Object names derive from instance/binding IDs (`gdb_…`, `gdbu_…`), always
   identifier-quoted; passwords are random 28-char values meeting the openGauss
   complexity policy.
-* openGauss defaults to sha256 auth; if psycopg2 cannot log in, set
-  `password_encryption_type = 1` (md5) for the admin user or swap in the
-  openGauss driver (`GaussDBAdmin._psycopg_connect` is one function).
+* openGauss defaults to sha256 auth (`password_encryption_type = 2`), which
+  stock psycopg2 cannot speak. Either set `password_encryption_type = 1`
+  (md5) with a matching `md5` line in `pg_hba.conf` for the admin user, or
+  swap the driver in `GaussDBAdmin._psycopg_connect`: the official
+  openGauss psycopg2 fork (gitee.com/opengauss/openGauss-connector-python-psycopg2,
+  identical API, built against openGauss's libpq) or `py-opengauss` from PyPI
+  (different API, see its docs).
 
 ## Tests
 

@@ -24,3 +24,6 @@ last_binding_operation
 autocommit
 row_factory
 DISABLE_SPACE_ORG_GUID_CHECK
+
+# Flask route registered via the @app.get decorator; called by the web server.
+healthz

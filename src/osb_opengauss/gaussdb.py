@@ -147,6 +147,12 @@ class GaussDBAdmin:
             cur.execute(probe)  # nosemgrep
             return cur.fetchone() is not None
 
+    def healthcheck(self) -> None:
+        """One round trip over the real connection path; raises on any failure."""
+        with self._admin_conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+
     # -- lifecycle -----------------------------------------------------------
 
     def provision(self, names: InstanceNames, spec: InstanceParams, storage_mode: str = "role_quota") -> None:

@@ -21,8 +21,9 @@ from .gaussdb import GaussDBAdmin
 from .state import StateStore
 
 
-def create_app(settings: Settings | None = None) -> Flask:
+def create_app(settings: Settings | None = None, admin: GaussDBAdmin | None = None) -> Flask:
     settings = settings or Settings.from_env()
+    admin = admin or GaussDBAdmin(settings)
 
     # Platform behaviour: Cloud Foundry sends org/space GUIDs on OSB
     # requests, Kubernetes Service Catalog does not (see DISABLE_SPACE_ORG_GUID_CHECK).
@@ -34,9 +35,19 @@ def create_app(settings: Settings | None = None) -> Flask:
         )
 
     app = Flask(__name__)
+
+    @app.get("/healthz")
+    def healthz():
+        # Unauthenticated on purpose: for load balancers and kube probes.
+        try:
+            admin.healthcheck()
+        except Exception as exc:
+            return {"status": "unreachable", "error": str(exc)}, 503
+        return {"status": "ok"}, 200
+
     app.register_blueprint(
         api.get_blueprint(
-            GaussDbBroker(GaussDBAdmin(settings), StateStore(settings.state_db_path), settings),
+            GaussDbBroker(admin, StateStore(settings.state_db_path), settings),
             api.BrokerCredentials(settings.broker_username, settings.broker_password),
             app.logger,
         )
